@@ -773,6 +773,18 @@ Stores units into a variable.
 
   * `{ "player": "PLAYER|ENEMY_PLAYER" }`
   * `{ "tile": position }`
+  * `{ "units": boolean }`
+  * `{ "buildings": boolean }`
+  * `{ "turrets": boolean }`
+
+| units/buildings/turrets params            | Result                                                                                    |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `{}`                                      | Units + Buildings + Turrets (defaults all true)                                           |
+| `{ "buildings": true }`                   | Buildings + Turrets                                                                       |
+| `{ "buildings": true, "turrets": false }` | Buildings only (Turrets excluded)                                                         |
+| `{ "turrets": true }`                     | Turrets only                                                                              |
+| `{ "units": true }`                       | Units only                                                                                |
+| `{ "buildings": false, "turrets": true }` | Turrets only                                                                              |
 
 ---
 
@@ -785,7 +797,7 @@ Eliminates a player.
 **Format**:
 
 ```jsonc
-["KILL", "PLAYER|ENEMY_PLAYER|NEUTRAL_PLAYER"]
+["KILL", "PLAYER|ENEMY_PLAYER|NEUTRAL_PLAYER|unitId(s)"]
 ```
 
 ---
