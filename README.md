@@ -795,12 +795,12 @@ Sets up resources, quests, camera, and initial triggers.
 Example:
 ```json
 "init": [
-["DISABLE_UNIT_CANCEL", ["OUTPOST"]],
-["SET_BUILD_UNIT_FLAGS", ["OUTPOST"], [
-{"flag": "placeOutpostEnabled", "equal": 1},
-{"tileType": "WHEAT", "radius": 2, "evolutionIndex": 0}
-]],
-["ADD_RESOURCES", "PLAYER", {"POWER": 30}, {"showToast": false}]
+  ["DISABLE_UNIT_CANCEL", ["OUTPOST"]],
+  ["SET_BUILD_UNIT_FLAGS", ["OUTPOST"], [
+    {"flag": "placeOutpostEnabled", "equal": 1},
+    {"tileType": "WHEAT", "radius": 2, "evolutionIndex": 0}
+  ]],
+  ["ADD_RESOURCES", "PLAYER", {"POWER": 30}, {"showToast": false}]
 ]
 ```
 ---
@@ -841,21 +841,21 @@ Planned or possible improvements:
 A simplified example mission:
 ```json
 {
-"experienceModifier": 1.0,
-"resourcePacks": { "POWER": 6, "SCRAP": 21 },
-"flags": [{ "name": "turnsRemaining", "value": 15 }],
-"quests": [{ "title": "Build a Scrapyard.", "icon": "SCRAPYARD" }],
-"triggers": [
-{
-"type": "UNIT_COMPLETED",
-"player": "PLAYER",
-"unitType": "SCRAPYARD",
-"actions": [["COMPLETE_QUEST", 0]]
-}
-],
-"init": [
-["ADD_RESOURCES", "PLAYER", {"POWER": 30}]
-]
+  "experienceModifier": 1.0,
+  "resourcePacks": { "POWER": 6, "SCRAP": 21 },
+  "flags": [{ "name": "turnsRemaining", "value": 15 }],
+  "quests": [{ "title": "Build a Scrapyard.", "icon": "SCRAPYARD" }],
+  "triggers": [
+    {
+      "type": "UNIT_COMPLETED",
+      "player": "PLAYER",
+      "unitType": "SCRAPYARD",
+      "actions": [["COMPLETE_QUEST", 0]]
+    }
+  ],
+  "init": [
+    ["ADD_RESOURCES", "PLAYER", {"POWER": 30}]
+  ]
 }
 ```
 ---
