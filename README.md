@@ -267,6 +267,8 @@ Selectors/variables like `$(...)` can be used anywhere a parameter accepts that 
 | `NEW_WAVE_ALERT`       | `["NEW_WAVE_ALERT"]`                                            | Shows incoming wave banner.                 | Pure UI effect.                                                                                                                                        |                                                                                                       |                                 |
 | `SET_STARS`            | `["SET_STARS", starCount:int]`                                  | Sets mission stars.                         | Immediate UI/mission state update.                                                                                                                     |                                                                                                       |                                 |
 | `ADD_RESOURCES`        | `["ADD_RESOURCES", player:str, resources:obj, options?:obj]`    | Grants resources/AP.                        | `resources` keys: `POWER,OIL,COBALT,HELIUM,SCIENCE,SCRAP,PRODUCTION,AP`; `options.showToast?:bool`.                                                    |                                                                                                       |                                 |
+| `GRANT_VISION`  | `["GRANT_VISION", position:Vector2i, radius:int]`  | Reveals tiles around a position for the player.    | `position`: center tile. `radius`: number of tiles outward to reveal. Affects fog of war.          |
+| `REVOKE_VISION` | `["REVOKE_VISION", position:Vector2i, radius:int]` | Removes vision (re-hides) tiles around a position. | `position`: center tile. `radius`: number of tiles outward to conceal. Opposite of `GRANT_VISION`. |
 | `NOOP`                 | `["NOOP", ...optional]`                                         | Placeholder / spacer.                       | Accepts unused extra params without effect.                                                                                                            |                                                                                                       |                                 |
 
 **Selectors and dynamic values:**
@@ -386,9 +388,55 @@ Changes a flag value by a delta.
 
 ---
 
+### `GRANT_VISION`
+
+Reveals a radius of tiles around a position, making them visible to the player (ignores normal fog of war rules).
+
+**Format**:
+
+```jsonc
+["GRANT_VISION", position, radius]
+```
+
+* `position` (Vector2i or selector): the center tile.
+* `radius` (int): the number of tiles outward to reveal.
+
+**Example**:
+
+```jsonc
+["GRANT_VISION", "$(MAP:wheatTile00)", 3]
+```
+
+Reveals all tiles within radius 3 of the wheat tile.
+
+---
+
+### `REVOKE_VISION`
+
+Hides a radius of tiles around a position, removing them from player vision (restores fog of war).
+
+**Format**:
+
+```jsonc
+["REVOKE_VISION", position, radius]
+```
+
+* `position` (Vector2i or selector): the center tile.
+* `radius` (int): the number of tiles outward to conceal.
+
+**Example**:
+
+```jsonc
+["REVOKE_VISION", "$(MAP:startTile)", 5]
+```
+
+Removes vision from all tiles within radius 5 of the starting tile.
+
+---
+
 #### `NOOP`
 
-Does nothing. Useful as a placeholder.
+Does nothing. Useful to disable actions or add comments.
 
 ```jsonc
 ["NOOP"]
