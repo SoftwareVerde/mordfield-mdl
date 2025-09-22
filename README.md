@@ -191,10 +191,10 @@ This section lists every supported opcode (action), its **signature** (parameter
 
 ### Construction Rules & UI Validations
 
-| Opcode                 | Signature                                                                                                                            | Notes                                                    |                                                            |                                                                                                                                                         |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Opcode | Signature | Notes  |
+| ----- | ----- | -------- |
 | `DISABLE_UNIT_CANCEL`  | `["DISABLE_UNIT_CANCEL", unitTypes:UnitType[]]`                                                                                      | Forbids canceling construction of the listed unit types. |                                                            |                                                                                                                                                         |
-| `SET_BUILD_UNIT_FLAGS` | \`\["SET\_BUILD\_UNIT\_FLAGS", unitTypes\:UnitType, requirements: ( { flag\:string, lessThan?\:int, equal?\:int, greaterThan?\:int } | { tileType:(TileType                                     | TileType\[]), radius\:int, evolutionIndex?\:int } )\[] ]\` | Adds a UI validator. All listed requirements must pass for the given `unitTypes` when building *from a unit*. Failing sets an explanatory error string. |
+| `SET_BUILD_UNIT_FLAGS` | `["SET_BUILD_UNIT_FLAGS", unitTypes:UnitType, requirements:({ flag:string, lessThan?:int, equal?:int, greaterThan?:int } \| { tileType:TileType\[], radius:int, evolutionIndex?:int } )]` | Adds a UI validator. All listed requirements must pass for the given `unitTypes` when building *from a unit*. Failing sets an explanatory error string. |
 
 ---
 
