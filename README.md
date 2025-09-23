@@ -81,6 +81,283 @@ Quests define objectives shown to the player.
 
 Triggers are event-driven logic. Each trigger watches for a condition (`type`) and executes `actions`.
 
+This section precisely documents which trigger keys are honored **per `TriggerType`**, what value types/selectors they accept, and how the engine evaluates them, based on the `Operation`/`Trigger` implementation you shared.
+
+---
+
+## A. Common trigger shape & mechanics
+
+**Available keys (MDL → engine `Trigger` fields):**
+
+| Key             | Type                                   | Default / Meaning                                                                                           |
+|-----------------|----------------------------------------|--------------------------------------------------------------------------------------------------------------|
+| `type`          | `TriggerType`                          | Required. Event source (see per-type rules below).                                                           |
+| `position`      | `Vector2i` (or selector)               | `INVALID_POSITION` by default. When set, used with `radius` to gate by location; semantics vary per type.   |
+| `radius`        | `int`                                   | `-1` means “disabled”. Engine uses `max(0, radius)` in most checks.                                          |
+| `unit`          | `UnitId` (or selector)                 | Matches **a specific unit** (source/target depending on type).                                               |
+| `unitType`      | `UnitType`                              | Matches by unit class (source/target depending on type).                                                     |
+| `player`        | `Player`                                | Matches the player involved (owner of the relevant unit, or the evented player).                             |
+| `apAuraType`    | `ActionPoint.AuraType`                  | Only honored by `AP_BOOST`. `NONE` acts as wildcard.                                                         |
+| `maxTriggerCount` | `int`                                 | Defaults to `1`. After firing `maxTriggerCount` times, the trigger auto-removes **unless** `keepTrigger` is set by the callback. |
+| *(internal)* `id`, `triggerCount` | —                   | Engine bookkeeping (not MDL inputs).                                                                         |
+
+**Execution & lifetime:**
+
+- Triggers are stored in `_triggers`. When the relevant engine signal fires, each trigger is tested; matches run `callback`.
+- `triggerCount` increments per fire. If `triggerCount >= maxTriggerCount` and the callback **did not** set `keepTrigger = true`, the trigger is removed.
+- Re-entrancy is guarded (`currentlyExecuting`).
+- `type: NONE` **runs immediately** upon `addTrigger` and is **not** stored (one-shot).
+
+---
+
+## B. Per-type key support & evaluation
+
+> Legend: **Honored keys** = the keys that affect matching for that `TriggerType`.
+
+### 1) `OCCUPY_TILE`
+
+**Honored keys:** `unit`, `unitType`, `player`, `position`, `radius`, `maxTriggerCount`  
+**Fires when:**
+- A unit **moves successfully** (`Action.Move.wasSuccessful`) **or** a unit is **added to the map** (spawn/complete) — the engine checks **both** sources.
+- Filters:
+  - If `unit` is set, only that exact unit qualifies.
+  - Else if `unitType` is set, the moving/spawned unit must match.
+  - If `player` is set, the unit’s owner must match.
+  - **Area test:** distance between the **unit’s position** and `position` must be ≤ `max(0, radius)`.  
+    - If `position` is not set (`INVALID_POSITION`) during **unit-added** path, the engine compares the unit’s position to itself (distance = 0) which always passes.  
+    - During **move** path, `position` **must** be set or the radius check uses an invalid center (set `position` in MDL).
+
+**Notes:** Use `visionIsRequired` in your higher-level action logic if needed; the trigger itself does not check FOW.
+
+---
+
+### 2) `UNIT_DEATH`
+
+**Honored keys:** `unit`, `unitType`, `player`, `position`, `radius`, `maxTriggerCount`  
+**Fires when:** any unit dies, **and**:
+- `unitType` is `NONE` or equals the dead unit’s type.
+- `player` is unset or equals the dead unit’s owner.
+- `unit` is unset or equals the exact dead unit.
+- If both `position != INVALID` **and** `radius >= 0`, the dead unit must be within radius of `position`.
+
+---
+
+### 3) `ALL_UNITS_DEAD`
+
+**Honored keys:** `player`, `maxTriggerCount`  
+**Fires when:** `gameState.unitEngine.hasUnits(player)` is **false**.
+
+---
+
+### 4) `ALL_BUILDINGS_DEAD`
+
+**Honored keys:** `player`, `maxTriggerCount`  
+**Fires when:** `gameState.unitEngine.hasBuildings(player)` is **false**.
+
+---
+
+### 5) `ALL_CITIES_DEAD`
+
+**Honored keys:** `player`, `maxTriggerCount`  
+**Fires when:** The player has **no `CITY` units** *and* **no `ROVER` units**.
+
+---
+
+### 6) `RECEIVED_DAMAGE`
+
+**Honored keys:** `unit`, `unitType`, `position`, `radius`, `maxTriggerCount`  
+**Fires when:** A `DamageAction` succeeds, and for **each** target (`UnitEcho`) in `damageAction.targetUnits`:
+- `unitType` is `NONE` or equals the **target’s prototype unit type**.
+- `unit` is unset or equals the exact **target unit**.
+- If `radius >= 0`, the target’s **current position** must be within radius of `position`.
+
+---
+
+### 7) `ATTACK`
+
+**Honored keys:** `unit`, `position`, `radius`, `maxTriggerCount`  
+**Fires when:** A `DamageAction` succeeds, and:
+- `unit` is unset **or** equals the **attacker** (`damageAction.sourceUnit`).
+- `position`/`radius` gate by the **attack’s target tile position**:  
+  distance(`position`, `damageAction.targetPosition`) ≤ `max(0, radius)`.
+
+**Notes:** `unitType` is *not* consulted for the attacker; use explicit `unit` or an `ATTACK` near area filter.
+
+---
+
+### 8) `UNIT_COMPLETED`
+
+**Honored keys:** `unit`, `unitType`, `player`, `position`, `radius`, `maxTriggerCount`  
+**Fires when:** A unit is **added to the map** (i.e., construction finished / warp-in / spawn), and:
+- `unitType` is `NONE` or equals the new unit’s type.
+- `unit` is unset or equals the new unit object.
+- `player` is unset or equals the unit owner.
+- **Area test:** distance between the unit’s position and `position` ≤ `max(0, radius)`.  
+  If `position` is unset (`INVALID_POSITION`), the check compares the unit’s position to itself (distance 0) → **always passes**.
+
+---
+
+### 9) `TILE_REVEALED`
+
+**Honored keys:** `player`, `position` **or** `unit`, `maxTriggerCount`  
+**Fires when:** The specified `player`’s fog engine reports a visibility change and:
+- If `unit` is set: tests `isTileVisible(unit.position)`.
+- Else: tests `isTileVisible(position)`.
+
+**Notes:** `radius` is **ignored** for this type.
+
+---
+
+### 10) `AP_BOOST`
+
+**Honored keys:** `apAuraType`, `unit`, `unitType`, `maxTriggerCount`  
+**Fires when:** Action Points are applied (`OnActionPointApplied`) and for each affected unit:
+- `apAuraType` is `NONE` (wildcard) or equals `aura.type`.
+- If `unit` is set and equals that unit → fire.
+- Else if `unitType` is `NONE` or equals the unit’s type → fire.
+
+---
+
+### 11) `TILE_DESTROYED`
+
+**Honored keys:** `position`, `maxTriggerCount`  
+**Fires when:** A tile evolves (e.g., via damage) and its **position equals** `position`.
+
+**Notes:** No radius; exact tile match only.
+
+---
+
+### 12) `PLAYER_DEATH`
+
+**Honored keys:** `player`, `maxTriggerCount`  
+**Fires when:** `World.OnPlayerDeath` for the specified `player`.
+
+---
+
+### 13) `PERK_UNLOCKED`
+
+**Honored keys:** `player`, `maxTriggerCount`  
+**Fires when:** `OnSciencePerkUnlocked(player, sciencePerk)` for the specified `player`.
+
+**Callback params:** `sciencePerk` is populated.
+
+---
+
+### 14) `RESOURCE_COLLECTED`
+
+**Honored keys:** `player`, `unit`, `unitType`, `position`, `radius`, `maxTriggerCount`  
+**Fires when:** `OnResourceGenerated(unit, resourceType, amount)` runs and:
+- `player` is unset or equals `unit.player`.
+- `unit` is unset or equals the producing `unit`.
+- `unitType` is `NONE` or equals the producing unit’s type.
+- If `position` is set: producing unit must be within `radius` of `position` (with `radius < 0` treated effectively as infinite).
+  
+**Callback params:** `resourceType`, `amount`, plus `unit`, `unitType`, `player`.
+
+**Also fired indirectly from scrap collection:** Scrap types (except `NONE`) are mapped to `resourceType` and routed through this same flow.
+
+---
+
+### 15) `SCRAP_COLLECTED`
+
+**Honored keys:** `player`, `unit`, `unitType`, `position`, `radius`, `maxTriggerCount`  
+**Fires when:** `OnScrapCollected(unit, scrapType, amount)` where:
+- Same unit/player/area filters as `RESOURCE_COLLECTED`.
+- **Callback params** use `scrapType` and `amount`.
+
+---
+
+### 16) `UNIT_QUEUED`
+
+**Honored keys:** `player`, `unit`, `unitType`, `position`, `radius`, `maxTriggerCount`  
+**Fires when:** A unit is **queued/built by a building**:
+- Triggered from `OnBuildingUnitBuilt` and `OnUnitQueued`.
+- Filters:
+  - `player` matches the actor player.
+  - `unit` matches the **receiving unit** (if present; for `OnUnitQueued` it may be `null` in the event).
+  - `unitType` matches the **prototype’s** `unitType` (the type being produced).
+  - If `position` is set: compares **unit position** (when available) with `position` against `radius` (with `<0` treated as infinite).
+
+**Callback params:** `unitType` is set from the **prototype** being queued/built. `unit` may be the building/receiving unit when available.
+
+---
+
+## C. Special cases & tips
+
+- **Immediate triggers:** `type: NONE` executes at registration time and never persists.
+- **Keeping a trigger alive:** In your trigger’s actions (MDL layer), you may set `keepTrigger = true` via the MDL runtime’s wrapper when you need a trigger to survive beyond `maxTriggerCount` firings (e.g., loops). If you rely purely on data, set a larger `maxTriggerCount`.
+- **Area checks & defaults:** Many types only run the area check if **both** `position` is set and `radius >= 0`. Use `radius = -1` (default) to disable the radius gate; use `0` to require “exact tile.”
+- **`OCCUPY_TILE` nuance:** It can fire on **move** and also on **spawn/complete**. If you want **only** move-based occupancy, gate on a flag you set after map init (or add a short `DELAY` before registering the trigger).
+- **City/rover defeat:** `ALL_CITIES_DEAD` treats **no `CITY` and no `ROVER`** as the condition to fire (mirrors campaign loss logic).
+- **AP aura wildcard:** `apAuraType: "NONE"` acts as “any aura.”
+
+---
+
+## D. Callback parameter availability
+
+When a trigger fires, the engine populates `TriggerCallbackParams` as follows (only fields relevant to the event are set):
+
+| Field          | Set for                                                                                           |
+|----------------|---------------------------------------------------------------------------------------------------|
+| `action`       | Move/attack/damage flows (`Action.Move`, `Action.DamageAction`)                                   |
+| `unit`         | The relevant unit (mover, new unit, dead unit, perk target, resource producer/collector, etc.)    |
+| `unitType`     | The relevant unit type (e.g., produced type for `UNIT_QUEUED`)                                    |
+| `player`       | The involved player (owner, death event, perk unlocker, etc.)                                     |
+| `sciencePerk`  | `PERK_UNLOCKED`                                                                                   |
+| `resourceType` | `RESOURCE_COLLECTED`                                                                              |
+| `scrapType`    | `SCRAP_COLLECTED`                                                                                 |
+| `amount`       | `RESOURCE_COLLECTED`, `SCRAP_COLLECTED`                                                            |
+| `keepTrigger`  | Default `false`. Your callback may set to `true` to keep the trigger after firing                 |
+
+---
+
+## E. Minimal examples
+
+```jsonc
+// Fire when any enemy unit dies within 3 tiles of a marker.
+{
+  "type": "UNIT_DEATH",
+  "player": "ENEMY_PLAYER",
+  "position": "$(MAP:ambushCenter)",
+  "radius": 3,
+  "actions": [ ["TOAST", {"text": "Target down"}] ]
+}
+```
+
+```jsonc
+// Fire whenever the player receives any AP aura on a Grenadier.
+{
+  "type": "AP_BOOST",
+  "unitType": "GRENADIER",
+  "apAuraType": "NONE",
+  "actions": [ ["SPEAK", "$(TRIGGER:unit)", "Feeling spry!"] ]
+}
+```
+
+```jsonc
+// Trigger the first time a tile becomes visible to the player (unit pin or fixed position).
+{
+  "type": "TILE_REVEALED",
+  "player": "PLAYER",
+  "position": "$(MAP:hilltop)",
+  "actions": [ ["MOVE_CAMERA", "$(MAP:hilltop)"] ]
+}
+```
+
+```jsonc
+// Resource collection near a refinery hub.
+{
+  "type": "RESOURCE_COLLECTED",
+  "player": "PLAYER",
+  "position": "$(MAP:refineryHub)",
+  "radius": 4,
+  "actions": [
+    ["TOAST", {"text":"+$(TRIGGER:amount) $(TRIGGER:resourceType) near hub"}]
+  ]
+}
+```
+
+
 See [Trigger Types](#trigger-types).
 
 ---
